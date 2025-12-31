@@ -26,6 +26,12 @@ from db_schema import ensure_schema
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Create the main app
+app = FastAPI()
+api_router = APIRouter(prefix="/api")
+security = HTTPBearer()
+
+# MongoDB connection
 # MongoDB connection
 mongo_url = os.environ.get('MONGO_URL')
 db_name = os.environ.get('DB_NAME')
@@ -59,10 +65,7 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production'
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
-# Create the main app
-app = FastAPI()
-api_router = APIRouter(prefix="/api")
-security = HTTPBearer()
+
 
 
 @app.on_event("startup")
