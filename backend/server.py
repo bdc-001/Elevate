@@ -19,6 +19,8 @@ import bcrypt
 from enum import Enum
 import secrets
 
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from db_schema import ensure_schema
 
 ROOT_DIR = Path(__file__).parent
