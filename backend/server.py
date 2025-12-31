@@ -2407,7 +2407,7 @@ async def get_tasks(customer_id: Optional[str] = None, assigned_to_id: Optional[
     return tasks
 
 @api_router.put("/tasks/{task_id}", response_model=Task)
-async def update_task(task_id: str, task_data: TaskCreate, current_user: Dict = Depends(get_current_user)):
+async def update_task(task_id: str, task_data: dict, current_user: Dict = Depends(get_current_user)):
     # Permission check
     perms = await _user_permissions(current_user)
     if not perms.get("modules", {}).get("tasks", {}).get("enabled"):
@@ -2419,11 +2419,11 @@ async def update_task(task_id: str, task_data: TaskCreate, current_user: Dict = 
     if not existing:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    update_dict = task_data.model_dump()
+    update_dict = {k: v for k, v in task_data.items() if v is not None}
     update_dict['updated_at'] = datetime.now(timezone.utc).isoformat()
     
     # If status changed to Completed, set completed_date
-    if task_data.status == TaskStatus.COMPLETED and existing.get('status') != 'Completed':
+    if task_data.get('status') == 'Completed' and existing.get('status') != 'Completed':
         update_dict['completed_date'] = datetime.now(timezone.utc).date().isoformat()
     
     await db.tasks.update_one({"id": task_id}, {"$set": update_dict})
