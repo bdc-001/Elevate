@@ -281,6 +281,7 @@ class TaskType(str, Enum):
 
 class TaskStatus(str, Enum):
     NOT_STARTED = "Not Started"
+    PENDING = "Pending"
     IN_PROGRESS = "In Progress"
     BLOCKED = "Blocked"
     WAITING_CUSTOMER = "Waiting on Customer"
