@@ -2234,6 +2234,20 @@ async def update_opportunity(opportunity_id: str, opp_data: dict, current_user: 
     await db.opportunities.update_one({"id": opportunity_id}, {"$set": update_dict})
     return {"message": "Opportunity updated successfully"}
 
+@api_router.delete("/opportunities/{opportunity_id}")
+async def delete_opportunity(opportunity_id: str, current_user: Dict = Depends(get_current_user)):
+    # Permission check
+    perms = await _user_permissions(current_user)
+    if not perms.get("modules", {}).get("opportunities", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="Opportunities module not accessible")
+    if not perms.get("modules", {}).get("opportunities", {}).get("actions", {}).get("delete"):
+        raise HTTPException(status_code=403, detail="No permission to delete opportunities")
+    
+    result = await db.opportunities.delete_one({"id": opportunity_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    return {"message": "Opportunity deleted successfully"}
+
 @api_router.put("/risks/{risk_id}")
 async def update_risk(risk_id: str, risk_data: dict, current_user: Dict = Depends(get_current_user)):
     existing = await db.risks.find_one({"id": risk_id}, {"_id": 0})
@@ -2525,6 +2539,20 @@ async def get_datalabs_reports(customer_id: Optional[str] = None, current_user: 
         if isinstance(report['created_at'], str):
             report['created_at'] = datetime.fromisoformat(report['created_at'])
     return reports
+
+@api_router.delete("/datalabs-reports/{report_id}")
+async def delete_datalabs_report(report_id: str, current_user: Dict = Depends(get_current_user)):
+    # Permission check
+    perms = await _user_permissions(current_user)
+    if not perms.get("modules", {}).get("datalabs_reports", {}).get("enabled"):
+        raise HTTPException(status_code=403, detail="DataLabs Reports module not accessible")
+    if not perms.get("modules", {}).get("datalabs_reports", {}).get("actions", {}).get("delete"):
+        raise HTTPException(status_code=403, detail="No permission to delete reports")
+    
+    result = await db.datalabs_reports.delete_one({"id": report_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"message": "Report deleted successfully"}
 
 # Dashboard Stats
 @api_router.get("/dashboard/stats")

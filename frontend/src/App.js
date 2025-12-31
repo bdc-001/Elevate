@@ -61,7 +61,7 @@ function App() {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     const perms = localStorage.getItem('permissions');
-    
+
     if (token && userData) {
       setUser(JSON.parse(userData));
     }
@@ -163,7 +163,7 @@ function App() {
               user ? (
                 hasModule('customers') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <CustomerList />
+                    <CustomerList permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />
@@ -179,7 +179,7 @@ function App() {
               user ? (
                 hasModule('customers') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <CustomerDetail />
+                    <CustomerDetail permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />
@@ -195,7 +195,7 @@ function App() {
               user ? (
                 hasModule('tasks') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <TaskList />
+                    <TaskList permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />
@@ -211,7 +211,7 @@ function App() {
               user ? (
                 hasModule('datalabs_reports') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <DataLabsReports />
+                    <DataLabsReports permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />
@@ -227,7 +227,7 @@ function App() {
               user ? (
                 hasModule('settings') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <Settings />
+                    <Settings permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />
@@ -243,7 +243,7 @@ function App() {
               user ? (
                 hasModule('dashboard') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <Reports />
+                    <Reports permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />
@@ -259,7 +259,7 @@ function App() {
               user ? (
                 hasModule('opportunities') ? (
                   <Layout user={user} permissions={permissions} onLogout={handleLogout}>
-                    <OpportunityPipeline />
+                    <OpportunityPipeline permissions={permissions} />
                   </Layout>
                 ) : (
                   <Navigate to="/" replace />

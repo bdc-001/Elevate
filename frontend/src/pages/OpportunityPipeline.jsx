@@ -4,7 +4,7 @@ import { API } from '../App';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Plus, TrendingUp, Filter, Download } from 'lucide-react';
+import { Plus, TrendingUp, Filter, Download, Trash2 } from 'lucide-react';
 import OpportunityForm from '../components/OpportunityForm';
 import { toast } from 'sonner';
 import { downloadFromApi } from '../lib/download';
@@ -30,7 +30,7 @@ const STAGE_COLORS = {
   'Closed Lost': 'bg-red-50 border-red-300'
 };
 
-export default function OpportunityPipeline() {
+export default function OpportunityPipeline({ permissions }) {
   const [opportunities, setOpportunities] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +76,21 @@ export default function OpportunityPipeline() {
     const customer = customers.find(c => c.id === opp.customer_id);
     setSelectedCustomer(customer);
     setShowForm(true);
+  };
+
+  const handleOppDelete = async (e, oppId, oppTitle) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete "${oppTitle}"?`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API}/opportunities/${oppId}`);
+      toast.success('Opportunity deleted successfully');
+      loadData();
+    } catch (error) {
+      toast.error('Failed to delete opportunity');
+    }
   };
 
   const totalPipeline = opportunities.filter(o => !['Closed Won', 'Closed Lost'].includes(o.stage)).reduce((sum, o) => sum + (o.value || 0), 0);
@@ -166,7 +181,7 @@ export default function OpportunityPipeline() {
               <Badge variant="outline">{getStageOpps(stage).length}</Badge>
             </div>
             <p className="text-sm font-medium text-slate-600 mb-4">{formatINR(getStageValue(stage))}</p>
-            
+
             <div className="space-y-3">
               {getStageOpps(stage).map(opp => (
                 <div
@@ -178,7 +193,18 @@ export default function OpportunityPipeline() {
                   <p className="text-xs text-slate-500 mb-2">{getCustomerName(opp.customer_id)}</p>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-green-600">{formatINR(opp.value)}</span>
-                    <span className="text-xs text-slate-500">{opp.probability}%</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-slate-500">{opp.probability}%</span>
+                      {permissions?.modules?.opportunities?.actions?.delete && (
+                        <button
+                          onClick={(e) => handleOppDelete(e, opp.id, opp.title)}
+                          className="text-slate-400 hover:text-red-600 transition-colors p-0.5"
+                          title="Delete Opportunity"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {opp.expected_close_date && (
                     <p className="text-xs text-slate-400 mt-1">Close: {new Date(opp.expected_close_date).toLocaleDateString('en-IN')}</p>

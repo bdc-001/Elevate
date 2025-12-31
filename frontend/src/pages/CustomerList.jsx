@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Plus, Search, Filter, Upload, Download } from 'lucide-react';
+import { Plus, Search, Filter, Upload, Download, Trash2 } from 'lucide-react';
 import CustomerForm from '../components/CustomerForm';
 import BulkUploadModal from '../components/BulkUploadModal';
 import { toast } from 'sonner';
@@ -23,7 +23,7 @@ const formatINR = (amount) => {
   return `₹${amount.toLocaleString('en-IN')}`;
 };
 
-export default function CustomerList() {
+export default function CustomerList({ permissions }) {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
@@ -111,6 +111,21 @@ export default function CustomerList() {
     setShowForm(false);
     setShowBulkUpload(false);
     loadCustomers();
+  };
+
+  const handleCustomerDelete = async (e, customerId, customerName) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete ${customerName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API}/customers/${customerId}`);
+      toast.success('Customer deleted successfully');
+      loadCustomers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete customer');
+    }
   };
 
   const ACCOUNT_STATUS_OPTIONS = ['POC/Pilot', 'Onboarding', 'UAT', 'Live', 'Hold', 'Churn'];
@@ -308,6 +323,9 @@ export default function CustomerList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Renewal Date
                 </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
@@ -346,9 +364,8 @@ export default function CustomerList() {
                     <td className="px-6 py-4">
                       <div onClick={(e) => e.stopPropagation()}>
                         <select
-                          className={`px-2 py-1.5 border border-slate-300 rounded-md text-xs bg-white ${
-                            savingAccountStatusId === customer.id ? 'opacity-60 cursor-not-allowed' : ''
-                          }`}
+                          className={`px-2 py-1.5 border border-slate-300 rounded-md text-xs bg-white ${savingAccountStatusId === customer.id ? 'opacity-60 cursor-not-allowed' : ''
+                            }`}
                           value={customer.account_status || 'Live'}
                           disabled={savingAccountStatusId === customer.id}
                           onChange={(e) => handleAccountStatusUpdate(customer.id, e.target.value)}
@@ -368,6 +385,17 @@ export default function CustomerList() {
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {customer.renewal_date ? new Date(customer.renewal_date).toLocaleDateString('en-IN') : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {permissions?.modules?.customers?.actions?.delete && (
+                        <button
+                          onClick={(e) => handleCustomerDelete(e, customer.id, customer.company_name)}
+                          className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                          title="Delete Customer"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

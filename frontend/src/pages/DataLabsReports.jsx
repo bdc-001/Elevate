@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { Plus, ExternalLink, Download } from 'lucide-react';
+import { Plus, ExternalLink, Download, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadFromApi } from '../lib/download';
 
@@ -20,7 +20,7 @@ const REPORT_TYPES = [
   'Other'
 ];
 
-export default function DataLabsReports() {
+export default function DataLabsReports({ permissions }) {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -67,6 +67,20 @@ export default function DataLabsReports() {
       setCustomers(response.data);
     } catch (error) {
       console.error('Error loading customers:', error);
+    }
+  };
+
+  const handleReportDelete = async (reportId) => {
+    if (!window.confirm('Are you sure you want to delete this report entry?')) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API}/datalabs-reports/${reportId}`);
+      toast.success('Report entry deleted successfully');
+      loadReports();
+    } catch (error) {
+      toast.error('Failed to delete report entry');
     }
   };
 
@@ -126,8 +140,8 @@ export default function DataLabsReports() {
       <Card className="p-6 bg-blue-50 border-blue-200">
         <h3 className="text-lg font-semibold text-blue-900 mb-2">What are Data Labs Reports?</h3>
         <p className="text-sm text-blue-800">
-          Data Labs Reports are customized analytics and insights reports created by CSM teams to provide 
-          customers with data-driven visibility into their usage, performance, and ROI. These reports go 
+          Data Labs Reports are customized analytics and insights reports created by CSM teams to provide
+          customers with data-driven visibility into their usage, performance, and ROI. These reports go
           beyond standard dashboards and offer tailored analysis, benchmarking, and actionable recommendations.
         </p>
       </Card>
@@ -155,6 +169,9 @@ export default function DataLabsReports() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Link
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -193,6 +210,17 @@ export default function DataLabsReports() {
                         <ExternalLink size={16} />
                         <span className="text-sm">View</span>
                       </a>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {permissions?.modules?.datalabs_reports?.actions?.delete && (
+                        <button
+                          onClick={() => handleReportDelete(report.id)}
+                          className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                          title="Delete Report"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

@@ -4,12 +4,12 @@ import { API } from '../App';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Plus, Filter, CheckCircle2, Clock, AlertCircle, Download } from 'lucide-react';
+import { Plus, Filter, CheckCircle2, Clock, AlertCircle, Download, Trash2 } from 'lucide-react';
 import TaskForm from '../components/TaskForm';
 import { toast } from 'sonner';
 import { downloadFromApi } from '../lib/download';
 
-export default function TaskList() {
+export default function TaskList({ permissions }) {
   const [tasks, setTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +108,21 @@ export default function TaskList() {
       loadData();
     } catch (error) {
       toast.error('Failed to update task');
+    }
+  };
+
+  const handleTaskDelete = async (e, taskId) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to delete this task?')) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API}/tasks/${taskId}`);
+      toast.success('Task deleted successfully');
+      loadData();
+    } catch (error) {
+      toast.error('Failed to delete task');
     }
   };
 
@@ -284,6 +299,7 @@ export default function TaskList() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Priority</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
@@ -305,8 +321,8 @@ export default function TaskList() {
                       <button
                         onClick={() => handleToggleComplete(task)}
                         className={`w-5 h-5 rounded border-2 flex items-center justify-center ${task.status === 'Completed'
-                            ? 'bg-green-500 border-green-500 text-white'
-                            : 'border-slate-300 hover:border-green-500'
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-slate-300 hover:border-green-500'
                           }`}
                       >
                         {task.status === 'Completed' && <CheckCircle2 size={14} />}
@@ -341,6 +357,17 @@ export default function TaskList() {
                       <Badge className={getStatusBadgeClass(task.status)}>
                         {task.status}
                       </Badge>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {permissions?.modules?.tasks?.actions?.delete && (
+                        <button
+                          onClick={(e) => handleTaskDelete(e, task.id)}
+                          className="text-slate-400 hover:text-red-600 transition-colors p-1"
+                          title="Delete Task"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
