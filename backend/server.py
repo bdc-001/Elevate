@@ -999,33 +999,40 @@ async def register(user_data: UserCreate):
 
 @api_router.post("/auth/login", response_model=Token)
 async def login(credentials: UserLogin):
-    user_dict = await db.users.find_one({"email": credentials.email})
-    
-    if not user_dict or not verify_password(credentials.password, user_dict['password']):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    try:
+        user_dict = await db.users.find_one({"email": credentials.email})
+        
+        if not user_dict or not verify_password(credentials.password, user_dict['password']):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Block login when not Active
-    status_val = (user_dict.get("status") or UserStatus.ACTIVE.value)
-    if status_val != UserStatus.ACTIVE.value:
-        raise HTTPException(status_code=403, detail=f"User is {status_val}")
-    
-    if isinstance(user_dict.get('created_at'), str):
-        user_dict['created_at'] = datetime.fromisoformat(user_dict['created_at'])
-    if isinstance(user_dict.get('last_login_at'), str):
-        try:
-            user_dict['last_login_at'] = datetime.fromisoformat(user_dict['last_login_at'])
-        except Exception:
-            user_dict['last_login_at'] = None
+        # Block login when not Active
+        status_val = (user_dict.get("status") or UserStatus.ACTIVE.value)
+        if status_val != UserStatus.ACTIVE.value:
+            raise HTTPException(status_code=403, detail=f"User is {status_val}")
+        
+        if isinstance(user_dict.get('created_at'), str):
+            user_dict['created_at'] = datetime.fromisoformat(user_dict['created_at'])
+        if isinstance(user_dict.get('last_login_at'), str):
+            try:
+                user_dict['last_login_at'] = datetime.fromisoformat(user_dict['last_login_at'])
+            except Exception:
+                user_dict['last_login_at'] = None
 
-    # Track login timestamp (live audit)
-    now = datetime.now(timezone.utc)
-    await db.users.update_one({"id": user_dict["id"]}, {"$set": {"last_login_at": now.isoformat()}})
-    user_dict["last_login_at"] = now
-    
-    user = User(**{k: v for k, v in user_dict.items() if k != 'password'})
-    token = create_access_token(user.id, user.email, [_enum_value(r) for r in user.roles] or [_enum_value(user.role or UserRole.READ_ONLY)])
-    
-    return Token(access_token=token, user=user)
+        # Track login timestamp (live audit)
+        now = datetime.now(timezone.utc)
+        await db.users.update_one({"id": user_dict["id"]}, {"$set": {"last_login_at": now.isoformat()}})
+        user_dict["last_login_at"] = now
+        
+        user = User(**{k: v for k, v in user_dict.items() if k != 'password'})
+        token = create_access_token(user.id, user.email, [_enum_value(r) for r in user.roles] or [_enum_value(user.role or UserRole.READ_ONLY)])
+        
+        return Token(access_token=token, user=user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 @api_router.post("/auth/accept-invite", response_model=Token)
 async def accept_invite(payload: InviteAccept):
