@@ -2801,10 +2801,13 @@ async def create_notification_for_user(
 app.include_router(api_router)
 
 # CORS
+origins_str = os.environ.get('CORS_ORIGINS', '*')
+allow_origins = [origin.strip() for origin in origins_str.split(',')] if origins_str else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=allow_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
