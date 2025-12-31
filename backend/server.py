@@ -25,9 +25,32 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL')
+db_name = os.environ.get('DB_NAME')
+
+client = None
+db = None
+
+if mongo_url and db_name:
+    try:
+        client = AsyncIOMotorClient(mongo_url)
+        db = client[db_name]
+    except Exception as e:
+        logging.error(f"Failed to connect to MongoDB: {e}")
+else:
+    logging.warning("MONGO_URL or DB_NAME not set in environment variables.")
+
+@app.get("/api/health")
+async def health_check():
+    return {
+        "status": "online",
+        "mongo_connected": client is not None,
+        "env_vars_present": {
+            "MONGO_URL": bool(mongo_url),
+            "DB_NAME": bool(db_name),
+            "JWT_SECRET": bool(os.environ.get("JWT_SECRET"))
+        }
+    }
 
 # JWT Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production')
