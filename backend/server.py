@@ -2564,165 +2564,130 @@ async def get_reports_analytics(current_user: Dict = Depends(get_current_user)):
     from dateutil.relativedelta import relativedelta
     from collections import defaultdict
     
-    now = datetime.now(timezone.utc)
-    current_month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-    last_month_start = current_month_start - relativedelta(months=1)
-    
-    # Get all customers and tasks
-    all_customers = await db.customers.find({}).to_list(None)
-    all_tasks = await db.tasks.find({}).to_list(None)
-    today_str = datetime.now(timezone.utc).date().isoformat()
-    
-    # --- Month-over-Month Trends ---
-    current_month_customers = [c for c in all_customers if c.get('created_at') and 
-                               datetime.fromisoformat(c['created_at']).replace(tzinfo=timezone.utc) >= current_month_start]
-    last_month_customers_count = sum(1 for c in all_customers if c.get('created_at') and 
-                                     last_month_start <= datetime.fromisoformat(c['created_at']).replace(tzinfo=timezone.utc) < current_month_start)
-    
-    # Customer growth %
-    total_customers_now = len(all_customers)
-    customers_before_current_month = total_customers_now - len(current_month_customers)
-    customer_growth_pct = round(((len(current_month_customers) / customers_before_current_month) * 100) if customers_before_current_month > 0 else 0, 1)
-    
-    # ARR growth %
-    current_total_arr = sum(c.get('arr', 0) for c in all_customers)
-    # Calculate last month ARR (excluding customers added this month)
-    last_month_arr = sum(c.get('arr', 0) for c in all_customers if c.get('created_at') and 
-                         datetime.fromisoformat(c['created_at']).replace(tzinfo=timezone.utc) < current_month_start)
-    arr_growth_pct = round(((current_total_arr - last_month_arr) / last_month_arr * 100) if last_month_arr > 0 else 0, 1)
-    
-    # Health score change
-    current_avg_health = sum(c.get('health_score', 0) for c in all_customers) / len(all_customers) if all_customers else 0
-    # Simplified: assume last month average was 2 points different (you can enhance this by storing historical data)
-    health_score_change = 0  # Placeholder - would need historical health_score tracking
-    
-    # --- Monthly Trend (Last 6 Months) ---
-    monthly_trend = []
-    for i in range(5, -1, -1):
-        month_start = current_month_start - relativedelta(months=i)
-        month_end = month_start + relativedelta(months=1)
-        month_name = month_start.strftime('%b')
+    try:
+        now = datetime.now(timezone.utc)
+        current_month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+        last_month_start = current_month_start - relativedelta(months=1)
         
-        # New customers in this month
-        new_customers_in_month = sum(1 for c in all_customers if c.get('created_at') and 
-                                     month_start <= datetime.fromisoformat(c['created_at']).replace(tzinfo=timezone.utc) < month_end)
-        
-        # Churn in this month (customers with churn_date or account_status = 'Churn')
-        churned_in_month = sum(1 for c in all_customers if 
-                               (c.get('account_status') == 'Churn' and c.get('churn_date') and
-                                month_start <= datetime.fromisoformat(c['churn_date']).replace(tzinfo=timezone.utc) < month_end))
-        
-        # Total ARR at end of month (customers created before month_end)
-        arr_at_month_end = sum(c.get('arr', 0) for c in all_customers if c.get('created_at') and 
-                               datetime.fromisoformat(c['created_at']).replace(tzinfo=timezone.utc) < month_end and
-                               c.get('account_status') != 'Churn')
-        
-        monthly_trend.append({
-            'month': month_name,
-            'newCustomers': new_customers_in_month,
-            'churn': churned_in_month,
-            'arr': arr_at_month_end
-        })
-    
-    # --- CSM Performance ---
-    # Get all users with CSM role
-    csms = await db.users.find({"roles": "CSM"}).to_list(None)
-    csm_performance = []
-    
-    for csm in csms:
-        csm_customers = [c for c in all_customers if c.get('csm_owner_id') == csm['id']]
-        csm_tasks = [t for t in all_tasks if t.get('assigned_to_id') == csm['id']]
-        
-        if not csm_customers and not csm_tasks:
-            continue
-        
-        accounts_count = len(csm_customers)
-        healthy_count = sum(1 for c in csm_customers if c.get('health_status') == 'Healthy')
-        at_risk_count = sum(1 for c in csm_customers if c.get('health_status') == 'At Risk')
-        total_arr = sum(c.get('arr', 0) for c in csm_customers)
-        
-        # Task Distribution
-        tasks_total = len(csm_tasks)
-        tasks_completed_on_time = sum(1 for t in csm_tasks if t.get('status') == 'Completed' and t.get('completed_date', '') <= t.get('due_date', ''))
-        tasks_completed_late = sum(1 for t in csm_tasks if t.get('status') == 'Completed' and t.get('completed_date', '') > t.get('due_date', ''))
-        tasks_overdue = sum(1 for t in csm_tasks if t.get('status') != 'Completed' and t.get('due_date', '') < today_str)
-        tasks_upcoming = sum(1 for t in csm_tasks if t.get('status') != 'Completed' and t.get('due_date', '') >= today_str)
+        def safe_dt(val):
+            if not val: return None
+            if isinstance(val, datetime): return val
+            try: return datetime.fromisoformat(val).replace(tzinfo=timezone.utc)
+            except: return None
 
-        csm_performance.append({
-            'name': csm.get('name', 'Unknown'),
-            'accounts': accounts_count,
-            'healthyPct': round((healthy_count / accounts_count) * 100) if accounts_count > 0 else 0,
-            'atRiskPct': round((at_risk_count / accounts_count) * 100) if accounts_count > 0 else 0,
-            'arr': total_arr,
-            'tasks': {
-                'total': tasks_total,
-                'completed_on_time': tasks_completed_on_time,
-                'completed_late': tasks_completed_late,
-                'overdue': tasks_overdue,
-                'upcoming': tasks_upcoming
-            }
-        })
-    
-    # Sort by ARR descending
-    csm_performance.sort(key=lambda x: x['arr'], reverse=True)
-    
-    # --- Renewal Forecast (Next 4 Quarters) ---
-    renewal_forecast = []
-    for q in range(4):
-        quarter_start = current_month_start + relativedelta(months=q*3)
-        quarter_end = quarter_start + relativedelta(months=3)
-        quarter_name = f"Q{((quarter_start.month - 1) // 3) + 1} {quarter_start.year}"
+        def safe_date_str(val):
+            if not val: return ""
+            if isinstance(val, datetime): return val.date().isoformat()
+            return str(val)
+
+        # Get all customers and tasks
+        all_customers = await db.customers.find({}).to_list(None)
+        all_tasks = await db.tasks.find({}).to_list(None)
+        today_str = now.date().isoformat()
         
-        # Customers with renewal dates in this quarter
-        renewals_in_quarter = [c for c in all_customers if c.get('renewal_date') and 
-                               quarter_start.date() <= datetime.fromisoformat(c['renewal_date']).date() < quarter_end.date()]
+        # --- Month-over-Month Trends ---
+        current_month_customers = [c for c in all_customers if safe_dt(c.get('created_at')) and safe_dt(c.get('created_at')) >= current_month_start]
         
-        renewal_count = len(renewals_in_quarter)
-        renewal_value = sum(c.get('arr', 0) for c in renewals_in_quarter)
-        at_risk_renewals = sum(1 for c in renewals_in_quarter if c.get('health_status') in ['At Risk', 'Critical'])
+        # Calculate last month ARR
+        total_customers_now = len(all_customers)
+        customers_before_current_month = total_customers_now - len(current_month_customers)
+        customer_growth_pct = round(((len(current_month_customers) / customers_before_current_month) * 100) if customers_before_current_month > 0 else 0, 1)
         
-        renewal_forecast.append({
-            'quarter': quarter_name,
-            'renewals': renewal_count,
-            'value': renewal_value,
-            'atRisk': at_risk_renewals
-        })
-    
-    # --- Net Revenue Retention (NRR) ---
-    # Simplified calculation: (Current ARR from existing customers) / (ARR 12 months ago) * 100
-    # For more accuracy, would need historical ARR tracking
-    year_ago = current_month_start - relativedelta(months=12)
-    customers_year_ago = [c for c in all_customers if c.get('created_at') and 
-                         datetime.fromisoformat(c['created_at']).replace(tzinfo=timezone.utc) < year_ago and
-                         c.get('account_status') != 'Churn']
-    
-    arr_year_ago = sum(c.get('arr', 0) for c in customers_year_ago)
-    current_arr_from_old_customers = sum(c.get('arr', 0) for c in customers_year_ago)
-    
-    nrr = round((current_arr_from_old_customers / arr_year_ago * 100) if arr_year_ago > 0 else 100, 0)
-    nrr_target = 100
-    nrr_status = "Above target" if nrr >= nrr_target else "Below target"
-    
-    return {
-        # Trends
-        "customer_growth_pct": customer_growth_pct,
-        "arr_growth_pct": arr_growth_pct,
-        "health_score_change": health_score_change,
+        current_total_arr = sum(float(c.get('arr') or 0) for c in all_customers)
+        last_month_arr = sum(float(c.get('arr') or 0) for c in all_customers if safe_dt(c.get('created_at')) and safe_dt(c.get('created_at')) < current_month_start)
+        arr_growth_pct = round(((current_total_arr - last_month_arr) / last_month_arr * 100) if last_month_arr > 0 else 0, 1)
         
-        # Time series
-        "monthly_trend": monthly_trend,
+        health_score_change = 0 # Future: track historical
         
-        # Performance
-        "csm_performance": csm_performance,
+        # --- Monthly Trend (Last 6 Months) ---
+        monthly_trend = []
+        for i in range(5, -1, -1):
+            m_start = current_month_start - relativedelta(months=i)
+            m_end = m_start + relativedelta(months=1)
+            
+            new_c = sum(1 for c in all_customers if safe_dt(c.get('created_at')) and m_start <= safe_dt(c.get('created_at')) < m_end)
+            churn_in_m = sum(1 for c in all_customers if c.get('account_status') == 'Churn' and safe_dt(c.get('churn_date')) and m_start <= safe_dt(c.get('churn_date')) < m_end)
+            arr_at_m_end = sum(float(c.get('arr') or 0) for c in all_customers if safe_dt(c.get('created_at')) and safe_dt(c.get('created_at')) < m_end and c.get('account_status') != 'Churn')
+            
+            monthly_trend.append({
+                'month': m_start.strftime('%b'),
+                'newCustomers': new_c,
+                'churn': churn_in_m,
+                'arr': arr_at_m_end
+            })
         
-        # Forecast
-        "renewal_forecast": renewal_forecast,
+        # --- CSM Performance ---
+        csms = await db.users.find({"$or": [{"roles": "CSM"}, {"role": "CSM"}]}).to_list(None)
+        csm_perf = []
         
-        # NRR
-        "nrr": nrr,
-        "nrr_target": nrr_target,
-        "nrr_status": nrr_status
-    }
+        for csm in csms:
+            csm_customers = [c for c in all_customers if c.get('csm_owner_id') == csm['id']]
+            csm_tasks = [t for t in all_tasks if t.get('assigned_to_id') == csm['id']]
+            if not csm_customers and not csm_tasks: continue
+            
+            acc_count = len(csm_customers)
+            h_count = sum(1 for c in csm_customers if c.get('health_status') == 'Healthy')
+            r_count = sum(1 for c in csm_customers if c.get('health_status') == 'At Risk')
+            t_arr = sum(float(c.get('arr') or 0) for c in csm_customers)
+            
+            t_total = len(csm_tasks)
+            t_on_time = sum(1 for t in csm_tasks if t.get('status') == 'Completed' and safe_date_str(t.get('completed_date')) <= safe_date_str(t.get('due_date')))
+            t_late = sum(1 for t in csm_tasks if t.get('status') == 'Completed' and safe_date_str(t.get('completed_date')) > safe_date_str(t.get('due_date')) and t.get('due_date'))
+            t_overdue = sum(1 for t in csm_tasks if t.get('status') != 'Completed' and safe_date_str(t.get('due_date')) < today_str and t.get('due_date'))
+            t_upcoming = sum(1 for t in csm_tasks if t.get('status') != 'Completed' and safe_date_str(t.get('due_date')) >= today_str)
+
+            csm_perf.append({
+                'name': csm.get('name', 'Unknown'),
+                'accounts': acc_count,
+                'healthyPct': round((h_count / acc_count) * 100) if acc_count > 0 else 0,
+                'atRiskPct': round((r_count / acc_count) * 100) if acc_count > 0 else 0,
+                'arr': t_arr,
+                'tasks': {
+                    'total': t_total,
+                    'completed_on_time': t_on_time,
+                    'completed_late': t_late,
+                    'overdue': t_overdue,
+                    'upcoming': t_upcoming
+                }
+            })
+        
+        csm_perf.sort(key=lambda x: x['arr'], reverse=True)
+        
+        # --- Renewal Forecast ---
+        renewal_forecast = []
+        for q in range(4):
+            q_start = current_month_start + relativedelta(months=q*3)
+            q_end = q_start + relativedelta(months=3)
+            
+            q_renewals = [c for c in all_customers if c.get('renewal_date') and q_start.date() <= safe_dt(c.get('renewal_date')).date() < q_end.date()]
+            renewal_forecast.append({
+                'quarter': f"Q{((q_start.month - 1) // 3) + 1} {q_start.year}",
+                'renewals': len(q_renewals),
+                'value': sum(float(c.get('arr') or 0) for c in q_renewals),
+                'atRisk': sum(1 for c in q_renewals if c.get('health_status') in ['At Risk', 'Critical'])
+            })
+        
+        # --- NRR ---
+        year_ago = current_month_start - relativedelta(months=12)
+        old_customers = [c for c in all_customers if safe_dt(c.get('created_at')) and safe_dt(c.get('created_at')) < year_ago and c.get('account_status') != 'Churn']
+        arr_year_ago = sum(float(c.get('arr') or 0) for c in old_customers)
+        nrr = round((sum(float(c.get('arr') or 0) for c in old_customers) / arr_year_ago * 100) if arr_year_ago > 0 else 100, 0)
+        
+        return {
+            "customer_growth_pct": customer_growth_pct,
+            "arr_growth_pct": arr_growth_pct,
+            "health_score_change": health_score_change,
+            "monthly_trend": monthly_trend,
+            "csm_performance": csm_perf,
+            "renewal_forecast": renewal_forecast,
+            "nrr": nrr,
+            "nrr_target": 100,
+            "nrr_status": "Above target" if nrr >= 100 else "Below target"
+        }
+    except Exception as e:
+        logger.error(f"Analytics error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating analytics: {str(e)}")
+
 
 # ============================================================================
 # NOTIFICATIONS
