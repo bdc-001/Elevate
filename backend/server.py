@@ -787,6 +787,8 @@ class CustomerCreate(BaseModel):
     am_owner_id: Optional[str] = None
     tags: List[str] = []
     stakeholders: List[Stakeholder] = []
+    health_status: Optional[str] = None
+    health_score: Optional[float] = None
 
 class AccountStatusUpdate(BaseModel):
     account_status: str
@@ -1780,8 +1782,18 @@ async def update_customer(customer_id: str, customer_data: CustomerCreate, curre
     update_dict['csm_owner_name'] = csm_name
     update_dict['am_owner_name'] = am_name
     update_dict['updated_at'] = datetime.now(timezone.utc).isoformat()
-    update_dict['health_score'] = calculate_health_score({**existing, **update_dict})
-    update_dict['health_status'] = determine_health_status(update_dict['health_score'])
+    
+    # Maintain health info if provided or already exists, otherwise compute
+    if update_dict.get('health_score') is None:
+        update_dict['health_score'] = existing.get('health_score')
+    if update_dict.get('health_status') is None:
+        update_dict['health_status'] = existing.get('health_status')
+    
+    # Still if both are None, compute it
+    if update_dict.get('health_score') is None:
+        update_dict['health_score'] = calculate_health_score({**existing, **update_dict})
+    if update_dict.get('health_status') is None:
+        update_dict['health_status'] = determine_health_status(update_dict['health_score'])
     
     await db.customers.update_one({"id": customer_id}, {"$set": update_dict})
     

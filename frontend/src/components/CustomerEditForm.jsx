@@ -39,7 +39,9 @@ export default function CustomerEditForm({ customer, onClose, onSuccess, editSec
     csm_owner_id: customer?.csm_owner_id || '',
     am_owner_id: customer?.am_owner_id || '',
     onboarding_status: customer?.onboarding_status || 'Not Started',
-    products_purchased: customer?.products_purchased || []
+    products_purchased: customer?.products_purchased || [],
+    health_status: customer?.health_status || null,
+    health_score: customer?.health_score || null
   });
 
   useEffect(() => {
@@ -81,7 +83,9 @@ export default function CustomerEditForm({ customer, onClose, onSuccess, editSec
         one_time_setup_cost: formData.one_time_setup_cost ? parseFloat(formData.one_time_setup_cost) : null,
         quarterly_consumption_cost: formData.quarterly_consumption_cost ? parseFloat(formData.quarterly_consumption_cost) : null,
         active_users: parseInt(formData.active_users) || 0,
-        total_licensed_users: parseInt(formData.total_licensed_users) || 0
+        total_licensed_users: parseInt(formData.total_licensed_users) || 0,
+        health_status: formData.health_status,
+        health_score: formData.health_score
       });
       toast.success('Customer updated successfully');
       onSuccess();
