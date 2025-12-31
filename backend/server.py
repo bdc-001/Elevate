@@ -68,22 +68,134 @@ JWT_EXPIRATION_HOURS = 168  # 7 days
 
 
 
-@app.on_event("startup")
-async def _startup_migrations() -> None:
-    """
-    Live-data setup:
-    - ensure collections/indexes (and attempt validators) exist
-    - ensure a default settings doc exists (required by Settings UI)
-    """
-    try:
-        await ensure_schema(db)
-    except Exception:
-        logging.exception("MongoDB schema ensure failed (continuing; app may be partially broken)")
+SETTINGS_CACHE = None
+SETTINGS_CACHE_TIMESTAMP = 0
+CACHE_TTL = 300  # 5 minutes
 
+@app.get("/api/admin/init-db")
+async def init_db_endpoint():
+    """Manually trigger schema validation and settings initialization."""
     try:
-        await _ensure_settings()
-    except Exception:
-        logging.exception("Default settings ensure failed (continuing; settings UI may be broken)")
+        if db:
+            await ensure_schema(db)
+            await _ensure_settings(force_refresh=True)
+            return {"status": "ok", "message": "Schema and settings initialized"}
+        return {"status": "error", "message": "Database not connected"}
+    except Exception as e:
+        logging.exception("Init DB failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def _ensure_settings(force_refresh: bool = False) -> Dict[str, Any]:
+    global SETTINGS_CACHE, SETTINGS_CACHE_TIMESTAMP
+    
+    now = datetime.now().timestamp()
+    if not force_refresh and SETTINGS_CACHE and (now - SETTINGS_CACHE_TIMESTAMP < CACHE_TTL):
+        return SETTINGS_CACHE
+
+    existing = await db.settings.find_one({"id": "global"}, {"_id": 0})
+    if existing:
+        # Backfill new fields (idempotent migrations)
+        missing_updates: Dict[str, Any] = {}
+
+        # role_permissions
+        if ("role_permissions" not in existing) or (existing.get("role_permissions") is None) or (existing.get("role_permissions") == {}):
+            missing_updates["role_permissions"] = _default_role_permissions()
+
+        # roles
+        try:
+            existing_roles = list(existing.get("roles") or [])
+            have = {r.get("role") for r in existing_roles if isinstance(r, dict)}
+            to_add = []
+            for rr in [
+                {"role": "SALES", "name": "Sales (View Only)", "desc": "View customers and opportunities (read-only)"},
+                {"role": "READ_ONLY", "name": "Read Only", "desc": "Read-only access within assigned scope"},
+            ]:
+                if rr["role"] not in have:
+                    to_add.append(rr)
+            if to_add:
+                missing_updates["roles"] = existing_roles + to_add
+        except Exception:
+            pass
+
+        if missing_updates:
+            await db.settings.update_one({"id": "global"}, {"$set": missing_updates})
+            existing = await db.settings.find_one({"id": "global"}, {"_id": 0}) or existing
+        
+        SETTINGS_CACHE = existing
+        SETTINGS_CACHE_TIMESTAMP = now
+        return existing
+
+    # Default settings creation (trimmed for brevity, logic remains same but now cached)
+    defaults = SettingsDoc(
+        tags=[
+            "Enterprise", "SMB", "Strategic", "High Touch", "Tech Touch",
+            "At Risk", "Champion", "Expansion Ready", "Renewal Due", "Upsell Target"
+        ],
+        dropdowns=[
+            DropdownDefinition(name="Activity Types", values=["Weekly Sync", "QBR", "MBR", "Phone Call", "Email"]),
+            DropdownDefinition(name="Risk Categories", values=["Product Usage", "Onboarding", "Support", "Relationship", "Commercial/Billing"]),
+            DropdownDefinition(name="Opportunity Stages", values=["Identified", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"]),
+            DropdownDefinition(name="Task Priorities", values=["Critical", "High", "Medium", "Low"]),
+            DropdownDefinition(name="Industries", values=["Technology", "Banking", "Fintech", "E-commerce"]),
+            DropdownDefinition(name="Regions", values=["South India", "West India", "North India", "East India", "Global"]),
+        ],
+        roles=[
+            RoleDefinition(role="ADMIN", name="Administrator", desc="Full access to all features and settings"),
+            RoleDefinition(role="CSM", name="Customer Success Manager", desc="Manage assigned customers, activities, tasks"),
+            RoleDefinition(role="AM", name="Account Manager", desc="View customers, manage opportunities and renewals"),
+            RoleDefinition(role="CS_LEADER", name="CS Leadership", desc="View all customers, reports, team performance"),
+            RoleDefinition(role="CS_OPS", name="CS Operations", desc="Manage settings, configurations, reports"),
+            RoleDefinition(role="SALES", name="Sales (View Only)", desc="View customers and opportunities (read-only)"),
+            RoleDefinition(role="READ_ONLY", name="Read Only", desc="Read-only access within assigned scope"),
+        ],
+        role_permissions=_default_role_permissions(),
+        field_configs={
+            "customer": [
+                FieldConfig(name="Company Name", type="Text", required=True, editable=False),
+                FieldConfig(name="Industry", type="Dropdown", required=False, editable=True),
+                FieldConfig(name="Region", type="Dropdown", required=False, editable=True),
+                FieldConfig(name="ARR", type="Currency", required=False, editable=True),
+                FieldConfig(name="One-time Setup Cost", type="Currency", required=False, editable=True),
+                FieldConfig(name="Quarterly Consumption Cost", type="Currency", required=False, editable=True),
+                FieldConfig(name="Health Score", type="Number", required=False, editable=True),
+            ],
+            "activity": [
+                FieldConfig(name="Activity Type", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Title", type="Text", required=True, editable=True),
+                FieldConfig(name="Summary", type="Long Text", required=True, editable=True),
+                FieldConfig(name="Sentiment", type="Dropdown", required=False, editable=True),
+            ],
+            "risk": [
+                FieldConfig(name="Category", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Severity", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Status", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Churn Probability", type="Percentage", required=False, editable=True),
+            ],
+            "opportunity": [
+                FieldConfig(name="Type", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Stage", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Value", type="Currency", required=False, editable=True),
+                FieldConfig(name="Probability", type="Percentage", required=True, editable=True),
+            ],
+            "task": [
+                FieldConfig(name="Task Type", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Priority", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Status", type="Dropdown", required=True, editable=True),
+                FieldConfig(name="Due Date", type="Date", required=True, editable=True),
+            ],
+        },
+        templates=[
+            TemplateGroup(name="Activity Templates", count=5, examples=["QBR Template", "Weekly Sync Notes", "Onboarding Call"]),
+            TemplateGroup(name="Report Templates", count=3, examples=["Monthly Report", "QBR Deck", "Health Summary"]),
+            TemplateGroup(name="Task Templates", count=4, examples=["Onboarding Checklist", "Renewal Prep", "Risk Mitigation"]),
+            TemplateGroup(name="Document Templates", count=6, examples=["SOW Template", "NDA Template", "Contract Amendment"]),
+        ],
+    ).model_dump()
+
+    await db.settings.insert_one(defaults)
+    SETTINGS_CACHE = defaults
+    SETTINGS_CACHE_TIMESTAMP = now
+    return defaults
 
 # Enums
 class UserRole(str, Enum):
