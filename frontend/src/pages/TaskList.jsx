@@ -59,7 +59,11 @@ export default function TaskList() {
     let filtered = [...tasks];
 
     if (filters.status !== 'all') {
-      filtered = filtered.filter(t => t.status === filters.status);
+      if (filters.status === 'Pending') {
+        filtered = filtered.filter(t => t.status === 'Pending' || t.status === 'Not Started');
+      } else {
+        filtered = filtered.filter(t => t.status === filters.status);
+      }
     }
 
     if (filters.priority !== 'all') {
@@ -75,10 +79,10 @@ export default function TaskList() {
       const today = new Date().toISOString().split('T')[0];
       const aOverdue = a.due_date < today && a.status !== 'Completed';
       const bOverdue = b.due_date < today && b.status !== 'Completed';
-      
+
       if (aOverdue && !bOverdue) return -1;
       if (!aOverdue && bOverdue) return 1;
-      
+
       return new Date(a.due_date) - new Date(b.due_date);
     });
 
@@ -111,7 +115,8 @@ export default function TaskList() {
     switch (status) {
       case 'Completed': return 'bg-green-100 text-green-700';
       case 'In Progress': return 'bg-blue-100 text-blue-700';
-      case 'Pending': return 'bg-yellow-100 text-yellow-700';
+      case 'Pending':
+      case 'Not Started': return 'bg-yellow-100 text-yellow-700';
       default: return 'bg-slate-100 text-slate-700';
     }
   };
@@ -215,7 +220,7 @@ export default function TaskList() {
             <Filter size={18} className="text-slate-500" />
             <span className="text-sm font-medium text-slate-700">Filters:</span>
           </div>
-          
+
           <select
             className="min-w-[140px] px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
             value={filters.status}
@@ -292,19 +297,17 @@ export default function TaskList() {
                 filteredTasks.map((task) => (
                   <tr
                     key={task.id}
-                    className={`hover:bg-slate-50 transition-colors cursor-pointer ${
-                      isOverdue(task.due_date, task.status) ? 'bg-red-50' : ''
-                    }`}
+                    className={`hover:bg-slate-50 transition-colors cursor-pointer ${isOverdue(task.due_date, task.status) ? 'bg-red-50' : ''
+                      }`}
                     onClick={() => handleEditTask(task)}
                   >
                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleToggleComplete(task)}
-                        className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          task.status === 'Completed'
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center ${task.status === 'Completed'
                             ? 'bg-green-500 border-green-500 text-white'
                             : 'border-slate-300 hover:border-green-500'
-                        }`}
+                          }`}
                       >
                         {task.status === 'Completed' && <CheckCircle2 size={14} />}
                       </button>
