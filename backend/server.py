@@ -2568,8 +2568,10 @@ async def get_reports_analytics(current_user: Dict = Depends(get_current_user)):
     current_month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     last_month_start = current_month_start - relativedelta(months=1)
     
-    # Get all customers with created dates
+    # Get all customers and tasks
     all_customers = await db.customers.find({}).to_list(None)
+    all_tasks = await db.tasks.find({}).to_list(None)
+    today_str = datetime.now(timezone.utc).date().isoformat()
     
     # --- Month-over-Month Trends ---
     current_month_customers = [c for c in all_customers if c.get('created_at') and 
@@ -2629,7 +2631,9 @@ async def get_reports_analytics(current_user: Dict = Depends(get_current_user)):
     
     for csm in csms:
         csm_customers = [c for c in all_customers if c.get('csm_owner_id') == csm['id']]
-        if not csm_customers:
+        csm_tasks = [t for t in all_tasks if t.get('assigned_to_id') == csm['id']]
+        
+        if not csm_customers and not csm_tasks:
             continue
         
         accounts_count = len(csm_customers)
@@ -2637,12 +2641,26 @@ async def get_reports_analytics(current_user: Dict = Depends(get_current_user)):
         at_risk_count = sum(1 for c in csm_customers if c.get('health_status') == 'At Risk')
         total_arr = sum(c.get('arr', 0) for c in csm_customers)
         
+        # Task Distribution
+        tasks_total = len(csm_tasks)
+        tasks_completed_on_time = sum(1 for t in csm_tasks if t.get('status') == 'Completed' and t.get('completed_date', '') <= t.get('due_date', ''))
+        tasks_completed_late = sum(1 for t in csm_tasks if t.get('status') == 'Completed' and t.get('completed_date', '') > t.get('due_date', ''))
+        tasks_overdue = sum(1 for t in csm_tasks if t.get('status') != 'Completed' and t.get('due_date', '') < today_str)
+        tasks_upcoming = sum(1 for t in csm_tasks if t.get('status') != 'Completed' and t.get('due_date', '') >= today_str)
+
         csm_performance.append({
             'name': csm.get('name', 'Unknown'),
             'accounts': accounts_count,
             'healthyPct': round((healthy_count / accounts_count) * 100) if accounts_count > 0 else 0,
             'atRiskPct': round((at_risk_count / accounts_count) * 100) if accounts_count > 0 else 0,
-            'arr': total_arr
+            'arr': total_arr,
+            'tasks': {
+                'total': tasks_total,
+                'completed_on_time': tasks_completed_on_time,
+                'completed_late': tasks_completed_late,
+                'overdue': tasks_overdue,
+                'upcoming': tasks_upcoming
+            }
         })
     
     # Sort by ARR descending

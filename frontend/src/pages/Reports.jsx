@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { 
-  BarChart3, TrendingUp, Users, AlertTriangle, IndianRupee, 
+import {
+  BarChart3, TrendingUp, Users, AlertTriangle, IndianRupee,
   Download, Calendar, RefreshCw, Filter
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
@@ -30,17 +30,17 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 const renderCustomDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, value, index }) => {
   // Don't render label for zero values - they'll show in legend
   if (value === 0) return null;
-  
+
   const RADIAN = Math.PI / 180;
   // Position labels outside the donut
   const radius = outerRadius + 35;
-  
+
   // Adjust angle slightly based on index to prevent overlap for small segments
   let adjustedAngle = midAngle;
   if (percent < 0.1) { // If segment is less than 10%
     adjustedAngle = midAngle + (index * 5); // Spread small segments
   }
-  
+
   const x = cx + radius * Math.cos(-adjustedAngle * RADIAN);
   const y = cy + radius * Math.sin(-adjustedAngle * RADIAN);
 
@@ -255,16 +255,16 @@ export default function Reports() {
                         <Cell key={index} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'white', 
-                        border: '1px solid #e2e8f0', 
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e2e8f0',
                         borderRadius: '8px',
                         padding: '8px 12px'
                       }}
                     />
-                    <Legend 
-                      verticalAlign="bottom" 
+                    <Legend
+                      verticalAlign="bottom"
                       height={36}
                       iconType="circle"
                       formatter={(value) => <span className="text-sm text-slate-700">{value}</span>}
@@ -372,28 +372,30 @@ export default function Reports() {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">CSM Name</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Accounts</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Health %</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">At Risk %</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Total ARR</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Performance</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase bg-green-50/50">Tasks On-Time</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase bg-orange-50/50">Tasks Late</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase bg-red-50/50">Overdue</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase bg-blue-50/50">Yet to Complete</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody className="divide-y text-sm">
                     {csmPerformance.map((csm, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium text-slate-800">{csm.name}</td>
                         <td className="px-4 py-3 text-slate-600">{csm.accounts}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-green-600 font-medium">{csm.healthyPct}%</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={csm.atRiskPct > 30 ? 'text-red-600' : 'text-orange-600'}>{csm.atRiskPct}%</span>
-                        </td>
                         <td className="px-4 py-3 font-medium text-slate-800">{formatINR(csm.arr)}</td>
-                        <td className="px-4 py-3">
-                          <Badge className={csm.healthyPct >= 75 ? 'bg-green-100 text-green-700' : csm.healthyPct >= 50 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}>
-                            {csm.healthyPct >= 75 ? 'Excellent' : csm.healthyPct >= 50 ? 'Good' : 'Needs Attention'}
-                          </Badge>
+                        <td className="px-4 py-3 text-center font-bold text-green-600">
+                          {csm.tasks?.completed_on_time || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-orange-600">
+                          {csm.tasks?.completed_late || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-red-600">
+                          {csm.tasks?.overdue || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-blue-600">
+                          {csm.tasks?.upcoming || 0}
                         </td>
                       </tr>
                     ))}
