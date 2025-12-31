@@ -42,8 +42,14 @@ db = None
 
 if mongo_url and db_name:
     try:
-        # Use certifi to provide validity for SSL certificates
-        client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
+        # Use certifi AND allow invalid certs to bypass Vercel environment issues
+        client = AsyncIOMotorClient(
+            mongo_url,
+            tlsCAFile=certifi.where(),
+            tls=True,
+            tlsAllowInvalidCertificates=True,
+            uuidRepresentation='standard'
+        )
         db = client[db_name]
     except Exception as e:
         logging.error(f"Failed to connect to MongoDB: {e}")
