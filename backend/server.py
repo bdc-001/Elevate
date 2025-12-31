@@ -33,6 +33,7 @@ security = HTTPBearer()
 
 # MongoDB connection
 # MongoDB connection
+import certifi
 mongo_url = os.environ.get('MONGO_URL')
 db_name = os.environ.get('DB_NAME')
 
@@ -41,7 +42,8 @@ db = None
 
 if mongo_url and db_name:
     try:
-        client = AsyncIOMotorClient(mongo_url)
+        # Use certifi to provide validity for SSL certificates
+        client = AsyncIOMotorClient(mongo_url, tlsCAFile=certifi.where())
         db = client[db_name]
     except Exception as e:
         logging.error(f"Failed to connect to MongoDB: {e}")
