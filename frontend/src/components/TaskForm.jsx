@@ -14,7 +14,7 @@ const TASK_TYPES = [
 ];
 
 const PRIORITIES = ['Critical', 'High', 'Medium', 'Low'];
-const STATUSES = ['Not Started', 'In Progress', 'Blocked', 'Waiting on Customer', 'Completed', 'Cancelled'];
+const STATUSES = ['Not Started', 'Pending', 'In Progress', 'Blocked', 'Waiting on Customer', 'Completed', 'Cancelled'];
 
 export default function TaskForm({ task, onClose, onSuccess, customerId, customerName }) {
   const [loading, setLoading] = useState(false);
