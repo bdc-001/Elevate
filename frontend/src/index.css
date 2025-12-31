@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family:
+        "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+        "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+        "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-weight: 400;
+}
+
+code, pre, .font-mono {
+    font-family: "JetBrains Mono", source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+@layer base {
+    :root {
+        /* Light Mode - Subtle blue-to-purple gradient backgrounds */
+        --background: 240 20% 98%;
+        --foreground: 0 0% 10%;
+        --card: 0 0% 100%;
+        --card-foreground: 0 0% 10%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 0 0% 10%;
+        
+        /* Primary: Modern blue #1A62F2 -> hsl(218, 89%, 53%) */
+        --primary: 218 89% 53%;
+        --primary-foreground: 0 0% 100%;
+        
+        /* Secondary: Purple #6A4FF7 -> hsl(251, 91%, 64%) */
+        --secondary: 251 91% 64%;
+        --secondary-foreground: 0 0% 100%;
+        
+        --muted: 240 10% 96%;
+        --muted-foreground: 0 0% 45%;
+        --accent: 240 20% 96%;
+        --accent-foreground: 218 89% 53%;
+        
+        /* Destructive: Red #F93739 -> hsl(359, 94%, 60%) */
+        --destructive: 359 94% 60%;
+        --destructive-foreground: 0 0% 100%;
+        
+        --border: 240 10% 90%;
+        --input: 240 10% 90%;
+        --ring: 218 89% 53%;
+        
+        /* Chart colors using brand palette */
+        --chart-1: 208 90% 51%; /* Chart Icon #1580EB */
+        --chart-2: 151 60% 48%; /* Green #1AC468 */
+        --chart-3: 42 98% 51%;  /* Yellow #F8AA0D */
+        --chart-4: 331 89% 68%; /* Pink #F564A9 */
+        --chart-5: 251 91% 64%; /* Purple #6A4FF7 */
+        
+        --radius: 0.5rem;
+    }
+    
+    .dark {
+        /* Dark Mode */
+        --background: 240 10% 5%;
+        --foreground: 0 0% 98%;
+        --card: 240 10% 8%;
+        --card-foreground: 0 0% 98%;
+        --popover: 240 10% 8%;
+        --popover-foreground: 0 0% 98%;
+        
+        /* Primary: Adjusted for dark mode (240 80% 70%) */
+        --primary: 240 80% 70%;
+        --primary-foreground: 0 0% 10%;
+        
+        /* Secondary: Adjusted for dark mode (260 50% 65%) */
+        --secondary: 260 50% 65%;
+        --secondary-foreground: 0 0% 10%;
+        
+        --muted: 240 10% 15%;
+        --muted-foreground: 0 0% 65%;
+        --accent: 240 10% 15%;
+        --accent-foreground: 240 80% 70%;
+        --destructive: 359 80% 55%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 10% 20%;
+        --input: 240 10% 20%;
+        --ring: 240 80% 70%;
+        
+        /* Chart colors for dark mode */
+        --chart-1: 208 90% 60%;
+        --chart-2: 151 60% 55%;
+        --chart-3: 42 98% 60%;
+        --chart-4: 331 89% 75%;
+        --chart-5: 260 50% 65%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+
+    [data-debug-wrapper="true"] > * {
+        margin-left: inherit;
+        margin-right: inherit;
+        margin-top: inherit;
+        margin-bottom: inherit;
+        padding-left: inherit;
+        padding-right: inherit;
+        padding-top: inherit;
+        padding-bottom: inherit;
+        column-gap: inherit;
+        row-gap: inherit;
+        gap: inherit;
+        border-left-width: inherit;
+        border-right-width: inherit;
+        border-top-width: inherit;
+        border-bottom-width: inherit;
+        border-left-style: inherit;
+        border-right-style: inherit;
+        border-top-style: inherit;
+        border-bottom-style: inherit;
+        border-left-color: inherit;
+        border-right-color: inherit;
+        border-top-color: inherit;
+        border-bottom-color: inherit;
+    }
+}
