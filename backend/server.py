@@ -2550,11 +2550,22 @@ async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
         ]).to_list(1)
         
         # Task stats
+        today = datetime.now(timezone.utc).date()
+        today_str = today.isoformat()
+        tomorrow_str = (today + timedelta(days=1)).isoformat()
+
         my_tasks = await db.tasks.count_documents({"assigned_to_id": current_user['user_id'], "status": {"$ne": "Completed"}})
+        
         overdue_tasks = await db.tasks.count_documents({
             "assigned_to_id": current_user['user_id'],
             "status": {"$ne": "Completed"},
-            "due_date": {"$lt": datetime.now(timezone.utc).date().isoformat()}
+            "due_date": {"$lt": today_str}
+        })
+
+        tasks_due_today = await db.tasks.count_documents({
+            "assigned_to_id": current_user['user_id'],
+            "status": {"$ne": "Completed"},
+            "due_date": {"$gte": today_str, "$lt": tomorrow_str}
         })
         
         return {
@@ -2568,7 +2579,8 @@ async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
             "active_opportunities": active_opportunities,
             "pipeline_value": pipeline_value[0]['total'] if pipeline_value and pipeline_value[0].get('total') else 0,
             "my_tasks": my_tasks,
-            "overdue_tasks": overdue_tasks
+            "overdue_tasks": overdue_tasks,
+            "tasks_due_today": tasks_due_today
         }
     except Exception as e:
         logger.error(f"Error fetching dashboard stats: {e}")
