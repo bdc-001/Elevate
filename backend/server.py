@@ -248,6 +248,14 @@ class PlanType(str, Enum):
     PREMIUM = "Premium"
     CUSTOM = "Custom"
 
+class ProductType(str, Enum):
+    POST_CALL = "Post Call"
+    RTA = "RTA"
+    AI_PHONE_CALL = "AI Phone Call"
+    CONVIN_SENSE = "Convin Sense"
+    CRM_UPGRADE = "CRM Upgrade"
+    STT_TTS_SOLUTION = "STT/TTS Solution"
+
 class HealthStatus(str, Enum):
     HEALTHY = "Healthy"
     AT_RISK = "At Risk"
@@ -683,7 +691,7 @@ class Customer(BaseModel):
     contract_end_date: Optional[str] = None
     renewal_date: Optional[str] = None
     go_live_date: Optional[str] = None
-    products_purchased: List[str] = []
+    products_purchased: List[ProductType] = []
     onboarding_status: OnboardingStatus = OnboardingStatus.NOT_STARTED
     account_status: Optional[str] = "Live"  # POC/Pilot, Onboarding, UAT, Live, Hold, Churn
     health_score: float = 50.0
@@ -716,7 +724,7 @@ class CustomerCreate(BaseModel):
     contract_end_date: Optional[str] = None
     renewal_date: Optional[str] = None
     go_live_date: Optional[str] = None
-    products_purchased: List[str] = []
+    products_purchased: List[ProductType] = []
     onboarding_status: OnboardingStatus = OnboardingStatus.NOT_STARTED
     primary_objective: Optional[str] = None
     calls_processed: int = 0
