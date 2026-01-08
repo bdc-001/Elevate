@@ -26,6 +26,13 @@ from db_schema import ensure_schema
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Logging setup (must be early for error handling)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Create the main app
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -710,6 +717,14 @@ def _has_perm(effective: Dict[str, Any], module_key: str, action: Optional[str] 
         return True
     return bool((mod.get("actions") or {}).get(action))
 
+async def _check_db_connection():
+    """Check if database connection is available."""
+    if db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection not available. Please check MongoDB connection settings."
+        )
+
 async def _require_perm(current_user: Dict, module_key: str, action: Optional[str] = None) -> Dict[str, Any]:
     eff = await _get_effective_permissions(current_user)
     if not _has_perm(eff, module_key, action):
@@ -1123,7 +1138,7 @@ async def register(user_data: UserCreate):
         roles = [_enum_value(user_data.role)]
     else:
         roles = [UserRole.CSM.value]
-
+    
     # Create user
     user = User(
         email=user_data.email,
@@ -1151,18 +1166,18 @@ async def register(user_data: UserCreate):
 @api_router.post("/auth/login", response_model=Token)
 async def login(credentials: UserLogin):
     try:
-        user_dict = await db.users.find_one({"email": credentials.email})
-        
-        if not user_dict or not verify_password(credentials.password, user_dict['password']):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-
+    user_dict = await db.users.find_one({"email": credentials.email})
+    
+    if not user_dict or not verify_password(credentials.password, user_dict['password']):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
         # Block login when not Active
         status_val = (user_dict.get("status") or UserStatus.ACTIVE.value)
         if status_val != UserStatus.ACTIVE.value:
             raise HTTPException(status_code=403, detail=f"User is {status_val}")
         
         if isinstance(user_dict.get('created_at'), str):
-            user_dict['created_at'] = datetime.fromisoformat(user_dict['created_at'])
+        user_dict['created_at'] = datetime.fromisoformat(user_dict['created_at'])
         if isinstance(user_dict.get('last_login_at'), str):
             try:
                 user_dict['last_login_at'] = datetime.fromisoformat(user_dict['last_login_at'])
@@ -1173,11 +1188,11 @@ async def login(credentials: UserLogin):
         now = datetime.now(timezone.utc)
         await db.users.update_one({"id": user_dict["id"]}, {"$set": {"last_login_at": now.isoformat()}})
         user_dict["last_login_at"] = now
-        
-        user = User(**{k: v for k, v in user_dict.items() if k != 'password'})
+    
+    user = User(**{k: v for k, v in user_dict.items() if k != 'password'})
         token = create_access_token(user.id, user.email, [_enum_value(r) for r in user.roles] or [_enum_value(user.role or UserRole.READ_ONLY)])
-        
-        return Token(access_token=token, user=user)
+    
+    return Token(access_token=token, user=user)
     except HTTPException:
         raise
     except Exception as e:
@@ -1265,6 +1280,7 @@ async def get_users(
     department: Optional[str] = None,
     q: Optional[str] = None,
 ):
+    await _check_db_connection()
     # View rules:
     # - ADMIN/CS_OPS: all users
     # - CS_LEADER: all users (read-only)
@@ -1683,35 +1699,42 @@ async def create_customer(customer_data: CustomerCreate, current_user: Dict = De
 
 @api_router.get("/customers", response_model=List[Customer])
 async def get_customers(current_user: Dict = Depends(get_current_user)):
-    eff = await _require_perm(current_user, "customers")
-    scope = await _customer_scope_query(current_user)
+    await _check_db_connection()
+    try:
+        eff = await _require_perm(current_user, "customers")
+        scope = await _customer_scope_query(current_user)
 
-    # Sales field restriction
-    projection = {"_id": 0}
-    customer_mod = (eff.get("modules") or {}).get("customers") or {}
-    if customer_mod.get("field_policy") == "sales_limited":
-        projection = {
-            "_id": 0,
-            "id": 1,
-            "company_name": 1,
-            "arr": 1,
-            "renewal_date": 1,
-            "health_score": 1,
-            "health_status": 1,
-            "account_status": 1,
-            "csm_owner_name": 1,
-            "am_owner_name": 1,
-            "region": 1,
-            "industry": 1,
-        }
+        # Sales field restriction
+        projection = {"_id": 0}
+        customer_mod = (eff.get("modules") or {}).get("customers") or {}
+        if customer_mod.get("field_policy") == "sales_limited":
+            projection = {
+                "_id": 0,
+                "id": 1,
+                "company_name": 1,
+                "arr": 1,
+                "renewal_date": 1,
+                "health_score": 1,
+                "health_status": 1,
+                "account_status": 1,
+                "csm_owner_name": 1,
+                "am_owner_name": 1,
+                "region": 1,
+                "industry": 1,
+            }
 
-    customers = await db.customers.find(scope, projection).to_list(1000)
+        customers = await db.customers.find(scope, projection).to_list(1000)
     for customer in customers:
-        if isinstance(customer.get('created_at'), str):
+            if isinstance(customer.get('created_at'), str):
             customer['created_at'] = datetime.fromisoformat(customer['created_at'])
-        if isinstance(customer.get('updated_at'), str):
+            if isinstance(customer.get('updated_at'), str):
             customer['updated_at'] = datetime.fromisoformat(customer['updated_at'])
     return customers
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching customers: {e}")
+        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
 
 @api_router.get("/customers/{customer_id}", response_model=Customer)
 async def get_customer(customer_id: str, current_user: Dict = Depends(get_current_user)):
@@ -1764,7 +1787,7 @@ async def update_customer(customer_id: str, customer_data: CustomerCreate, curre
         csm_user = await db.users.find_one({"id": effective["csm_owner_id"]}, {"_id": 0, "manager_id": 1})
         if csm_user and csm_user.get("manager_id"):
             effective["am_owner_id"] = csm_user["manager_id"]
-
+    
     # Get CSM/AM details
     csm_name = None
     if effective.get("csm_owner_id"):
@@ -1791,9 +1814,9 @@ async def update_customer(customer_id: str, customer_data: CustomerCreate, curre
     
     # Still if both are None, compute it
     if update_dict.get('health_score') is None:
-        update_dict['health_score'] = calculate_health_score({**existing, **update_dict})
+    update_dict['health_score'] = calculate_health_score({**existing, **update_dict})
     if update_dict.get('health_status') is None:
-        update_dict['health_status'] = determine_health_status(update_dict['health_score'])
+    update_dict['health_status'] = determine_health_status(update_dict['health_score'])
     
     await db.customers.update_one({"id": customer_id}, {"$set": update_dict})
     
@@ -2007,26 +2030,28 @@ async def create_activity(activity_data: ActivityCreate, current_user: Dict = De
 
 @api_router.get("/activities", response_model=List[Activity])
 async def get_activities(customer_id: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
-    # Permission check
-    perms = await _user_permissions(current_user)
-    if not perms.get("modules", {}).get("activities", {}).get("enabled"):
-        raise HTTPException(status_code=403, detail="Activities module not accessible")
-    
+    await _check_db_connection()
+    try:
+        # Permission check
+        perms = await _user_permissions(current_user)
+        if not perms.get("modules", {}).get("activities", {}).get("enabled"):
+            raise HTTPException(status_code=403, detail="Activities module not accessible")
+        
     query = {}
     if customer_id:
         query['customer_id'] = customer_id
     
-    # Apply data scoping
-    scope = perms.get("modules", {}).get("activities", {}).get("scope", "all")
-    if scope == "own":
-        # Own activities: created by the user
-        query["csm_id"] = current_user['user_id']
-    elif scope == "team":
-        # Team: get customers managed by CSMs reporting to this AM
-        team_csm_ids = await _get_team_csm_ids(current_user['user_id'])
-        team_customer_ids = await _get_customer_ids_for_csms(team_csm_ids + [current_user['user_id']])
-        query["customer_id"] = {"$in": team_customer_ids}
-    
+        # Apply data scoping
+        scope = perms.get("modules", {}).get("activities", {}).get("scope", "all")
+        if scope == "own":
+            # Own activities: created by the user
+            query["csm_id"] = current_user['user_id']
+        elif scope == "team":
+            # Team: get customers managed by CSMs reporting to this AM
+            team_csm_ids = await _get_team_csm_ids(current_user['user_id'])
+            team_customer_ids = await _get_customer_ids_for_csms(team_csm_ids + [current_user['user_id']])
+            query["customer_id"] = {"$in": team_customer_ids}
+        
     activities = await db.activities.find(query, {"_id": 0}).sort("activity_date", -1).to_list(1000)
     for activity in activities:
         if isinstance(activity['activity_date'], str):
@@ -2034,6 +2059,11 @@ async def get_activities(customer_id: Optional[str] = None, current_user: Dict =
         if isinstance(activity['created_at'], str):
             activity['created_at'] = datetime.fromisoformat(activity['created_at'])
     return activities
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching activities: {e}")
+        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
 
 @api_router.put("/activities/{activity_id}")
 async def update_activity(activity_id: str, activity_data: dict, current_user: Dict = Depends(get_current_user)):
@@ -2094,33 +2124,45 @@ async def create_risk(risk_data: RiskCreate, current_user: Dict = Depends(get_cu
 
 @api_router.get("/risks", response_model=List[Risk])
 async def get_risks(customer_id: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
-    # Permission check
-    perms = await _user_permissions(current_user)
-    if not perms.get("modules", {}).get("risks", {}).get("enabled"):
-        raise HTTPException(status_code=403, detail="Risks module not accessible")
-    
-    query = {}
-    if customer_id:
-        query['customer_id'] = customer_id
-    
-    # Apply data scoping
-    scope = perms.get("modules", {}).get("risks", {}).get("scope", "all")
-    if scope == "own":
-        # Own risks: assigned to the user
-        query["assigned_to_id"] = current_user['user_id']
-    elif scope == "team":
-        # Team: get customers managed by CSMs reporting to this AM
-        team_csm_ids = await _get_team_csm_ids(current_user['user_id'])
-        team_customer_ids = await _get_customer_ids_for_csms(team_csm_ids + [current_user['user_id']])
-        query["customer_id"] = {"$in": team_customer_ids}
-    
-    risks = await db.risks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    for risk in risks:
-        if isinstance(risk['created_at'], str):
-            risk['created_at'] = datetime.fromisoformat(risk['created_at'])
-        if isinstance(risk['updated_at'], str):
-            risk['updated_at'] = datetime.fromisoformat(risk['updated_at'])
-    return risks
+    await _check_db_connection()
+    try:
+        # Permission check
+        perms = await _user_permissions(current_user)
+        if not perms.get("modules", {}).get("risks", {}).get("enabled"):
+            raise HTTPException(status_code=403, detail="Risks module not accessible")
+        
+        query = {}
+        if customer_id:
+            query['customer_id'] = customer_id
+        
+        # Apply data scoping
+        scope = perms.get("modules", {}).get("risks", {}).get("scope", "all")
+        if scope == "own":
+            # Own risks: assigned to the user
+            query["assigned_to_id"] = current_user['user_id']
+        elif scope == "team":
+            # Team: get customers managed by CSMs reporting to this AM
+            team_csm_ids = await _get_team_csm_ids(current_user['user_id'])
+            team_customer_ids = await _get_customer_ids_for_csms(team_csm_ids + [current_user['user_id']])
+            query["customer_id"] = {"$in": team_customer_ids}
+        
+        risks = await db.risks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+        for risk in risks:
+            if isinstance(risk['created_at'], str):
+                risk['created_at'] = datetime.fromisoformat(risk['created_at'])
+            if isinstance(risk['updated_at'], str):
+                risk['updated_at'] = datetime.fromisoformat(risk['updated_at'])
+        return risks
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching risks: {e}")
+        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching risks: {e}")
+        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
 
 @api_router.put("/risks/{risk_id}", response_model=Risk)
 async def update_risk(risk_id: str, risk_data: RiskCreate, current_user: Dict = Depends(get_current_user)):
@@ -2187,6 +2229,7 @@ async def create_opportunity(opp_data: OpportunityCreate, current_user: Dict = D
 
 @api_router.get("/opportunities", response_model=List[Opportunity])
 async def get_opportunities(customer_id: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
+    await _check_db_connection()
     # Permission check
     perms = await _user_permissions(current_user)
     if not perms.get("modules", {}).get("opportunities", {}).get("enabled"):
@@ -2398,6 +2441,7 @@ async def create_task(task_data: TaskCreate, current_user: Dict = Depends(get_cu
 
 @api_router.get("/tasks", response_model=List[Task])
 async def get_tasks(customer_id: Optional[str] = None, assigned_to_id: Optional[str] = None, status: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
+    await _check_db_connection()
     # Permission check
     perms = await _user_permissions(current_user)
     if not perms.get("modules", {}).get("tasks", {}).get("enabled"):
@@ -2514,6 +2558,7 @@ async def create_datalabs_report(report_data: DataLabsReportCreate, current_user
 
 @api_router.get("/datalabs-reports", response_model=List[DataLabsReport])
 async def get_datalabs_reports(customer_id: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
+    await _check_db_connection()
     # Permission check
     perms = await _user_permissions(current_user)
     if not perms.get("modules", {}).get("datalabs_reports", {}).get("enabled"):
@@ -2557,6 +2602,8 @@ async def delete_datalabs_report(report_id: str, current_user: Dict = Depends(ge
 # Dashboard Stats
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
+    await _check_db_connection()
+    try:
     total_customers = await db.customers.count_documents({})
     total_arr = await db.customers.aggregate([
         {"$group": {"_id": None, "total": {"$sum": "$arr"}}}
@@ -2596,11 +2643,15 @@ async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
         "my_tasks": my_tasks,
         "overdue_tasks": overdue_tasks
     }
+    except Exception as e:
+        logger.error(f"Error fetching dashboard stats: {e}")
+        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
 
 # Reports Analytics
 @api_router.get("/reports/analytics")
 async def get_reports_analytics(current_user: Dict = Depends(get_current_user)):
     """Calculate dynamic trends, CSM performance, and forecasts from database"""
+    await _check_db_connection()
     from dateutil.relativedelta import relativedelta
     from collections import defaultdict
     
@@ -2991,13 +3042,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Logging already configured at top of file
+
+@app.on_event("startup")
+async def startup_db():
+    """Initialize database connection and schema on startup."""
+    global db, client
+    try:
+        if db:
+            await ensure_schema(db)
+            logger.info("Database schema initialized successfully")
+        else:
+            logger.warning("Database connection not available on startup")
+    except Exception as e:
+        logger.error(f"Failed to initialize database on startup: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    if client:
     client.close()
