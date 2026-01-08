@@ -242,6 +242,11 @@ class UserStatus(str, Enum):
 class PlanType(str, Enum):
     HOURLY = "Hourly"
     LICENSE = "License"
+    ENTERPRISE = "Enterprise"
+    PROFESSIONAL = "Professional"
+    STARTER = "Starter"
+    PREMIUM = "Premium"
+    CUSTOM = "Custom"
 
 class HealthStatus(str, Enum):
     HEALTHY = "Healthy"
@@ -252,6 +257,7 @@ class OnboardingStatus(str, Enum):
     NOT_STARTED = "Not Started"
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
+    ON_HOLD = "On Hold"
 
 class RiskSeverity(str, Enum):
     LOW = "Low"
@@ -265,6 +271,7 @@ class RiskStatus(str, Enum):
     MONITORING = "Monitoring"
     RESOLVED = "Resolved"
     CLOSED = "Closed"
+    MITIGATED = "Mitigated"
 
 class ActivityType(str, Enum):
     WEEKLY_SYNC = "Weekly Sync"
@@ -282,6 +289,14 @@ class ActivityType(str, Enum):
     RENEWAL_DISCUSSION = "Renewal Discussion"
     UPSELL_DISCUSSION = "Upsell/Cross-sell Discussion"
     OTHER = "Other"
+    # Legacy / Simple types found in dummy data
+    CALL = "Call"
+    EMAIL = "Email"
+    MEETING = "Meeting"
+    TRAINING = "Training"
+    SUPPORT = "Support"
+    CHECK_IN = "Check-in"
+    ONBOARDING = "Onboarding"
 
 class TaskType(str, Enum):
     FOLLOW_UP_CALL = "Follow-up Call"
@@ -297,6 +312,8 @@ class TaskType(str, Enum):
     DOCUMENTATION = "Documentation"
     ESCALATION = "Escalation"
     OTHER = "Other"
+
+
 
 class TaskStatus(str, Enum):
     NOT_STARTED = "Not Started"
@@ -639,8 +656,8 @@ _user_permissions = _get_effective_permissions
 class Stakeholder(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    full_name: str
-    email: Optional[EmailStr] = None
+    name: str
+    email: Optional[str] = None
     phone: Optional[str] = None
     job_title: Optional[str] = None
     role_type: Optional[str] = None
