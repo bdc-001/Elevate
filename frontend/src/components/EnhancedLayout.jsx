@@ -82,8 +82,8 @@ export default function EnhancedLayout({ children, user, permissions, onLogout }
                 key={item.path}
                 to={item.path}
                 className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 mx-2 rounded-lg transition-all ${active
-                    ? 'bg-brand-hover text-brand-primary font-medium shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-brand-hover text-brand-primary font-medium shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 data-testid={item.testId}
                 title={sidebarCollapsed ? item.label : ''}
@@ -156,8 +156,7 @@ export default function EnhancedLayout({ children, user, permissions, onLogout }
             <div className="flex items-center gap-4">
               <NotificationBell />
               <div className="text-xs text-slate-500">
-                Convin.ai CSM Platform
-                <span className="text-[10px] text-slate-300 ml-1" title="Created by Arsalaan">• Arsalaan</span>
+                Convin.ai CSM Platform <span className="opacity-50">• Arsalaan</span>
               </div>
             </div>
           </div>
