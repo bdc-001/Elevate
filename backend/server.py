@@ -312,8 +312,12 @@ class TaskType(str, Enum):
     DOCUMENTATION = "Documentation"
     ESCALATION = "Escalation"
     OTHER = "Other"
-
-
+    # Legacy / Simple types
+    FOLLOW_UP = "Follow-up"
+    SUPPORT = "Support"
+    TRAINING = "Training"
+    QBR_PREPARATION = "QBR Preparation"
+    ONBOARDING = "Onboarding"
 
 class TaskStatus(str, Enum):
     NOT_STARTED = "Not Started"
@@ -323,6 +327,7 @@ class TaskStatus(str, Enum):
     WAITING_CUSTOMER = "Waiting on Customer"
     COMPLETED = "Completed"
     CANCELLED = "Cancelled"
+    OVERDUE = "Overdue"
 
 class TaskPriority(str, Enum):
     CRITICAL = "Critical"
