@@ -2946,7 +2946,7 @@ async def startup_db():
     """Initialize database connection and schema on startup."""
     global db, client
     try:
-        if db:
+        if db is not None:
             await ensure_schema(db)
             logger.info("Database schema initialized successfully")
         else:
