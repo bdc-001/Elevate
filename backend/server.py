@@ -2550,23 +2550,44 @@ async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
         ]).to_list(1)
         
         # Task stats
+        perms = await _user_permissions(current_user)
+        task_scope = perms.get("modules", {}).get("tasks", {}).get("scope", "own")
+        
+        task_query_base = {}
+        if task_scope == "own":
+             task_query_base = {
+                 "$or": [
+                     {"assigned_to_id": current_user['user_id']},
+                     {"created_by_id": current_user['user_id']}
+                 ]
+             }
+        elif task_scope == "team":
+             team_csm_ids = await _get_team_csm_ids(current_user['user_id'])
+             team_customer_ids = await _get_customer_ids_for_csms(team_csm_ids + [current_user['user_id']])
+             task_query_base = {"customer_id": {"$in": team_customer_ids}}
+        # If 'all', task_query_base remains empty {}
+
         today = datetime.now(timezone.utc).date()
         today_str = today.isoformat()
         tomorrow_str = (today + timedelta(days=1)).isoformat()
 
-        my_tasks = await db.tasks.count_documents({"assigned_to_id": current_user['user_id'], "status": {"$ne": "Completed"}})
+        # "my_tasks" here effectively means "Tasks I can see" / "Active Tasks"
+        q_active = {**task_query_base, "status": {"$ne": "Completed"}}
+        active_tasks_count = await db.tasks.count_documents(q_active)
         
-        overdue_tasks = await db.tasks.count_documents({
-            "assigned_to_id": current_user['user_id'],
+        q_overdue = {
+            **task_query_base,
             "status": {"$ne": "Completed"},
             "due_date": {"$lt": today_str}
-        })
+        }
+        overdue_tasks = await db.tasks.count_documents(q_overdue)
 
-        tasks_due_today = await db.tasks.count_documents({
-            "assigned_to_id": current_user['user_id'],
+        q_due_today = {
+            **task_query_base,
             "status": {"$ne": "Completed"},
             "due_date": {"$gte": today_str, "$lt": tomorrow_str}
-        })
+        }
+        tasks_due_today = await db.tasks.count_documents(q_due_today)
         
         return {
             "total_customers": total_customers,
@@ -2578,7 +2599,7 @@ async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
             "critical_risks": critical_risks,
             "active_opportunities": active_opportunities,
             "pipeline_value": pipeline_value[0]['total'] if pipeline_value and pipeline_value[0].get('total') else 0,
-            "my_tasks": my_tasks,
+            "my_tasks": active_tasks_count,
             "overdue_tasks": overdue_tasks,
             "tasks_due_today": tasks_due_today
         }
