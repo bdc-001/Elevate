@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, File, UploadFile, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, File, UploadFile, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -8,6 +8,7 @@ import os
 import logging
 import csv
 import io
+import traceback
 import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
@@ -35,6 +36,17 @@ logger = logging.getLogger(__name__)
 
 # Create the main app
 app = FastAPI()
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = str(exc)
+    # unexpected errors often mean DB issues or code bugs
+    logger.error(f"Global error on {request.url.path}: {error_msg}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": error_msg, "path": str(request.url.path)}
+    )
 api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
@@ -551,117 +563,7 @@ def _default_role_permissions() -> Dict[str, Any]:
         },
     }
 
-async def _ensure_settings() -> Dict[str, Any]:
-    existing = await db.settings.find_one({"id": "global"}, {"_id": 0})
-    if existing:
-        # Backfill new fields (idempotent migrations) without overwriting existing values
-        # Build default settings using the current code-path defaults (below) so new installs match old behavior.
-        # We reuse the same defaults builder by calling this function's "create path" logic in-place.
-        # If your DB already has settings, we only set missing keys.
-        missing_updates: Dict[str, Any] = {}
 
-        # role_permissions: if missing entirely, seed it from the newly-defined defaults below
-        if ("role_permissions" not in existing) or (existing.get("role_permissions") is None) or (existing.get("role_permissions") == {}):
-            missing_updates["role_permissions"] = _default_role_permissions()
-
-        # roles: ensure SALES and READ_ONLY roles exist in older DB docs
-        try:
-            existing_roles = list(existing.get("roles") or [])
-            have = {r.get("role") for r in existing_roles if isinstance(r, dict)}
-            to_add = []
-            for rr in [
-                {"role": "SALES", "name": "Sales (View Only)", "desc": "View customers and opportunities (read-only)"},
-                {"role": "READ_ONLY", "name": "Read Only", "desc": "Read-only access within assigned scope"},
-            ]:
-                if rr["role"] not in have:
-                    to_add.append(rr)
-            if to_add:
-                missing_updates["roles"] = existing_roles + to_add
-        except Exception:
-            pass
-
-        if missing_updates:
-            await db.settings.update_one({"id": "global"}, {"$set": missing_updates})
-            existing = await db.settings.find_one({"id": "global"}, {"_id": 0}) or existing
-
-        return existing
-
-    defaults = SettingsDoc(
-        tags=[
-            "Enterprise",
-            "SMB",
-            "Strategic",
-            "High Touch",
-            "Tech Touch",
-            "At Risk",
-            "Champion",
-            "Expansion Ready",
-            "Renewal Due",
-            "Upsell Target",
-        ],
-        dropdowns=[
-            DropdownDefinition(name="Activity Types", values=["Weekly Sync", "QBR", "MBR", "Phone Call", "Email"]),
-            DropdownDefinition(name="Risk Categories", values=["Product Usage", "Onboarding", "Support", "Relationship", "Commercial/Billing"]),
-            DropdownDefinition(name="Opportunity Stages", values=["Identified", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"]),
-            DropdownDefinition(name="Task Priorities", values=["Critical", "High", "Medium", "Low"]),
-            DropdownDefinition(name="Industries", values=["Technology", "Banking", "Fintech", "E-commerce"]),
-            DropdownDefinition(name="Regions", values=["South India", "West India", "North India", "East India", "Global"]),
-        ],
-        roles=[
-            RoleDefinition(role="ADMIN", name="Administrator", desc="Full access to all features and settings"),
-            RoleDefinition(role="CSM", name="Customer Success Manager", desc="Manage assigned customers, activities, tasks"),
-            RoleDefinition(role="AM", name="Account Manager", desc="View customers, manage opportunities and renewals"),
-            RoleDefinition(role="CS_LEADER", name="CS Leadership", desc="View all customers, reports, team performance"),
-            RoleDefinition(role="CS_OPS", name="CS Operations", desc="Manage settings, configurations, reports"),
-            RoleDefinition(role="SALES", name="Sales (View Only)", desc="View customers and opportunities (read-only)"),
-            RoleDefinition(role="READ_ONLY", name="Read Only", desc="Read-only access within assigned scope"),
-        ],
-        role_permissions=_default_role_permissions(),
-        field_configs={
-            "customer": [
-                FieldConfig(name="Company Name", type="Text", required=True, editable=False),
-                FieldConfig(name="Industry", type="Dropdown", required=False, editable=True),
-                FieldConfig(name="Region", type="Dropdown", required=False, editable=True),
-                FieldConfig(name="ARR", type="Currency", required=False, editable=True),
-                FieldConfig(name="One-time Setup Cost", type="Currency", required=False, editable=True),
-                FieldConfig(name="Quarterly Consumption Cost", type="Currency", required=False, editable=True),
-                FieldConfig(name="Health Score", type="Number", required=False, editable=True),
-            ],
-            "activity": [
-                FieldConfig(name="Activity Type", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Title", type="Text", required=True, editable=True),
-                FieldConfig(name="Summary", type="Long Text", required=True, editable=True),
-                FieldConfig(name="Sentiment", type="Dropdown", required=False, editable=True),
-            ],
-            "risk": [
-                FieldConfig(name="Category", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Severity", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Status", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Churn Probability", type="Percentage", required=False, editable=True),
-            ],
-            "opportunity": [
-                FieldConfig(name="Type", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Stage", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Value", type="Currency", required=False, editable=True),
-                FieldConfig(name="Probability", type="Percentage", required=True, editable=True),
-            ],
-            "task": [
-                FieldConfig(name="Task Type", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Priority", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Status", type="Dropdown", required=True, editable=True),
-                FieldConfig(name="Due Date", type="Date", required=True, editable=True),
-            ],
-        },
-        templates=[
-            TemplateGroup(name="Activity Templates", count=5, examples=["QBR Template", "Weekly Sync Notes", "Onboarding Call"]),
-            TemplateGroup(name="Report Templates", count=3, examples=["Monthly Report", "QBR Deck", "Health Summary"]),
-            TemplateGroup(name="Task Templates", count=4, examples=["Onboarding Checklist", "Renewal Prep", "Risk Mitigation"]),
-            TemplateGroup(name="Document Templates", count=6, examples=["SOW Template", "NDA Template", "Contract Amendment"]),
-        ],
-    ).model_dump()
-
-    await db.settings.insert_one(defaults)
-    return defaults
 
 # --- Permissions evaluation (configurable via SettingsDoc.role_permissions) ---
 def _scope_rank(scope: Optional[str]) -> int:
@@ -1166,18 +1068,18 @@ async def register(user_data: UserCreate):
 @api_router.post("/auth/login", response_model=Token)
 async def login(credentials: UserLogin):
     try:
-    user_dict = await db.users.find_one({"email": credentials.email})
-    
-    if not user_dict or not verify_password(credentials.password, user_dict['password']):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+        user_dict = await db.users.find_one({"email": credentials.email})
+        
+        if not user_dict or not verify_password(credentials.password, user_dict['password']):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
         # Block login when not Active
         status_val = (user_dict.get("status") or UserStatus.ACTIVE.value)
         if status_val != UserStatus.ACTIVE.value:
             raise HTTPException(status_code=403, detail=f"User is {status_val}")
         
         if isinstance(user_dict.get('created_at'), str):
-        user_dict['created_at'] = datetime.fromisoformat(user_dict['created_at'])
+            user_dict['created_at'] = datetime.fromisoformat(user_dict['created_at'])
         if isinstance(user_dict.get('last_login_at'), str):
             try:
                 user_dict['last_login_at'] = datetime.fromisoformat(user_dict['last_login_at'])
@@ -1189,10 +1091,10 @@ async def login(credentials: UserLogin):
         await db.users.update_one({"id": user_dict["id"]}, {"$set": {"last_login_at": now.isoformat()}})
         user_dict["last_login_at"] = now
     
-    user = User(**{k: v for k, v in user_dict.items() if k != 'password'})
+        user = User(**{k: v for k, v in user_dict.items() if k != 'password'})
         token = create_access_token(user.id, user.email, [_enum_value(r) for r in user.roles] or [_enum_value(user.role or UserRole.READ_ONLY)])
     
-    return Token(access_token=token, user=user)
+        return Token(access_token=token, user=user)
     except HTTPException:
         raise
     except Exception as e:
@@ -1814,9 +1716,9 @@ async def update_customer(customer_id: str, customer_data: CustomerCreate, curre
     
     # Still if both are None, compute it
     if update_dict.get('health_score') is None:
-    update_dict['health_score'] = calculate_health_score({**existing, **update_dict})
+        update_dict['health_score'] = calculate_health_score({**existing, **update_dict})
     if update_dict.get('health_status') is None:
-    update_dict['health_status'] = determine_health_status(update_dict['health_score'])
+        update_dict['health_status'] = determine_health_status(update_dict['health_score'])
     
     await db.customers.update_one({"id": customer_id}, {"$set": update_dict})
     
@@ -2037,9 +1939,9 @@ async def get_activities(customer_id: Optional[str] = None, current_user: Dict =
         if not perms.get("modules", {}).get("activities", {}).get("enabled"):
             raise HTTPException(status_code=403, detail="Activities module not accessible")
         
-    query = {}
-    if customer_id:
-        query['customer_id'] = customer_id
+        query = {}
+        if customer_id:
+            query['customer_id'] = customer_id
     
         # Apply data scoping
         scope = perms.get("modules", {}).get("activities", {}).get("scope", "all")
@@ -2052,13 +1954,13 @@ async def get_activities(customer_id: Optional[str] = None, current_user: Dict =
             team_customer_ids = await _get_customer_ids_for_csms(team_csm_ids + [current_user['user_id']])
             query["customer_id"] = {"$in": team_customer_ids}
         
-    activities = await db.activities.find(query, {"_id": 0}).sort("activity_date", -1).to_list(1000)
-    for activity in activities:
-        if isinstance(activity['activity_date'], str):
-            activity['activity_date'] = datetime.fromisoformat(activity['activity_date'])
-        if isinstance(activity['created_at'], str):
-            activity['created_at'] = datetime.fromisoformat(activity['created_at'])
-    return activities
+        activities = await db.activities.find(query, {"_id": 0}).sort("activity_date", -1).to_list(1000)
+        for activity in activities:
+            if isinstance(activity['activity_date'], str):
+                activity['activity_date'] = datetime.fromisoformat(activity['activity_date'])
+            if isinstance(activity['created_at'], str):
+                activity['created_at'] = datetime.fromisoformat(activity['created_at'])
+        return activities
     except HTTPException:
         raise
     except Exception as e:
@@ -2599,45 +2501,45 @@ async def delete_datalabs_report(report_id: str, current_user: Dict = Depends(ge
 async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
     try:
         await _check_db_connection()
-    total_customers = await db.customers.count_documents({})
-    total_arr = await db.customers.aggregate([
-        {"$group": {"_id": None, "total": {"$sum": "$arr"}}}
-    ]).to_list(1)
-    
-    healthy_count = await db.customers.count_documents({"health_status": "Healthy"})
-    at_risk_count = await db.customers.count_documents({"health_status": "At Risk"})
-    critical_count = await db.customers.count_documents({"health_status": "Critical"})
-    
-    open_risks = await db.risks.count_documents({"status": "Open"})
-    critical_risks = await db.risks.count_documents({"severity": "Critical"})
-    
-    active_opportunities = await db.opportunities.count_documents({"stage": {"$ne": "Closed Won"}})
-    pipeline_value = await db.opportunities.aggregate([
-        {"$match": {"stage": {"$ne": "Closed Won"}}},
-        {"$group": {"_id": None, "total": {"$sum": "$value"}}}
-    ]).to_list(1)
-    
-    # Task stats
-    my_tasks = await db.tasks.count_documents({"assigned_to_id": current_user['user_id'], "status": {"$ne": "Completed"}})
-    overdue_tasks = await db.tasks.count_documents({
-        "assigned_to_id": current_user['user_id'],
-        "status": {"$ne": "Completed"},
-        "due_date": {"$lt": datetime.now(timezone.utc).date().isoformat()}
-    })
-    
-    return {
-        "total_customers": total_customers,
-        "total_arr": total_arr[0]['total'] if total_arr and total_arr[0].get('total') else 0,
-        "healthy_customers": healthy_count,
-        "at_risk_customers": at_risk_count,
-        "critical_customers": critical_count,
-        "open_risks": open_risks,
-        "critical_risks": critical_risks,
-        "active_opportunities": active_opportunities,
-        "pipeline_value": pipeline_value[0]['total'] if pipeline_value and pipeline_value[0].get('total') else 0,
-        "my_tasks": my_tasks,
-        "overdue_tasks": overdue_tasks
-    }
+        total_customers = await db.customers.count_documents({})
+        total_arr = await db.customers.aggregate([
+            {"$group": {"_id": None, "total": {"$sum": "$arr"}}}
+        ]).to_list(1)
+        
+        healthy_count = await db.customers.count_documents({"health_status": "Healthy"})
+        at_risk_count = await db.customers.count_documents({"health_status": "At Risk"})
+        critical_count = await db.customers.count_documents({"health_status": "Critical"})
+        
+        open_risks = await db.risks.count_documents({"status": "Open"})
+        critical_risks = await db.risks.count_documents({"severity": "Critical"})
+        
+        active_opportunities = await db.opportunities.count_documents({"stage": {"$ne": "Closed Won"}})
+        pipeline_value = await db.opportunities.aggregate([
+            {"$match": {"stage": {"$ne": "Closed Won"}}},
+            {"$group": {"_id": None, "total": {"$sum": "$value"}}}
+        ]).to_list(1)
+        
+        # Task stats
+        my_tasks = await db.tasks.count_documents({"assigned_to_id": current_user['user_id'], "status": {"$ne": "Completed"}})
+        overdue_tasks = await db.tasks.count_documents({
+            "assigned_to_id": current_user['user_id'],
+            "status": {"$ne": "Completed"},
+            "due_date": {"$lt": datetime.now(timezone.utc).date().isoformat()}
+        })
+        
+        return {
+            "total_customers": total_customers,
+            "total_arr": total_arr[0]['total'] if total_arr and total_arr[0].get('total') else 0,
+            "healthy_customers": healthy_count,
+            "at_risk_customers": at_risk_count,
+            "critical_customers": critical_count,
+            "open_risks": open_risks,
+            "critical_risks": critical_risks,
+            "active_opportunities": active_opportunities,
+            "pipeline_value": pipeline_value[0]['total'] if pipeline_value and pipeline_value[0].get('total') else 0,
+            "my_tasks": my_tasks,
+            "overdue_tasks": overdue_tasks
+        }
     except Exception as e:
         logger.error(f"Error fetching dashboard stats: {e}")
         raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
@@ -3055,4 +2957,4 @@ async def startup_db():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     if client:
-    client.close()
+        client.close()
