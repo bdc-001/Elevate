@@ -1,10 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Activity, 
-  AlertTriangle, 
-  TrendingUp, 
+import {
+  LayoutDashboard,
+  Users,
+  Activity,
+  AlertTriangle,
+  TrendingUp,
   CheckSquare,
   FileText,
   Settings,
@@ -76,16 +76,15 @@ export default function EnhancedLayout({ children, user, permissions, onLogout }
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
-            
+
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 mx-2 rounded-lg transition-all ${
-                  active
+                className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 mx-2 rounded-lg transition-all ${active
                     ? 'bg-brand-hover text-brand-primary font-medium shadow-sm'
                     : 'text-slate-600 hover:bg-slate-50'
-                }`}
+                  }`}
                 data-testid={item.testId}
                 title={sidebarCollapsed ? item.label : ''}
               >
@@ -158,6 +157,7 @@ export default function EnhancedLayout({ children, user, permissions, onLogout }
               <NotificationBell />
               <div className="text-xs text-slate-500">
                 Convin.ai CSM Platform
+                <span className="text-[10px] text-slate-300 ml-1" title="Created by Arsalaan">• Arsalaan</span>
               </div>
             </div>
           </div>
