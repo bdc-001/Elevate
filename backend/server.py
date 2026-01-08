@@ -1699,8 +1699,8 @@ async def create_customer(customer_data: CustomerCreate, current_user: Dict = De
 
 @api_router.get("/customers", response_model=List[Customer])
 async def get_customers(current_user: Dict = Depends(get_current_user)):
-    await _check_db_connection()
     try:
+        await _check_db_connection()
         eff = await _require_perm(current_user, "customers")
         scope = await _customer_scope_query(current_user)
 
@@ -1724,12 +1724,12 @@ async def get_customers(current_user: Dict = Depends(get_current_user)):
             }
 
         customers = await db.customers.find(scope, projection).to_list(1000)
-    for customer in customers:
+        for customer in customers:
             if isinstance(customer.get('created_at'), str):
-            customer['created_at'] = datetime.fromisoformat(customer['created_at'])
+                customer['created_at'] = datetime.fromisoformat(customer['created_at'])
             if isinstance(customer.get('updated_at'), str):
-            customer['updated_at'] = datetime.fromisoformat(customer['updated_at'])
-    return customers
+                customer['updated_at'] = datetime.fromisoformat(customer['updated_at'])
+        return customers
     except HTTPException:
         raise
     except Exception as e:
@@ -2030,8 +2030,8 @@ async def create_activity(activity_data: ActivityCreate, current_user: Dict = De
 
 @api_router.get("/activities", response_model=List[Activity])
 async def get_activities(customer_id: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
-    await _check_db_connection()
     try:
+        await _check_db_connection()
         # Permission check
         perms = await _user_permissions(current_user)
         if not perms.get("modules", {}).get("activities", {}).get("enabled"):
@@ -2124,8 +2124,8 @@ async def create_risk(risk_data: RiskCreate, current_user: Dict = Depends(get_cu
 
 @api_router.get("/risks", response_model=List[Risk])
 async def get_risks(customer_id: Optional[str] = None, current_user: Dict = Depends(get_current_user)):
-    await _check_db_connection()
     try:
+        await _check_db_connection()
         # Permission check
         perms = await _user_permissions(current_user)
         if not perms.get("modules", {}).get("risks", {}).get("enabled"):
@@ -2153,11 +2153,6 @@ async def get_risks(customer_id: Optional[str] = None, current_user: Dict = Depe
             if isinstance(risk['updated_at'], str):
                 risk['updated_at'] = datetime.fromisoformat(risk['updated_at'])
         return risks
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching risks: {e}")
-        raise HTTPException(status_code=503, detail=f"Database error: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
@@ -2602,8 +2597,8 @@ async def delete_datalabs_report(report_id: str, current_user: Dict = Depends(ge
 # Dashboard Stats
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: Dict = Depends(get_current_user)):
-    await _check_db_connection()
     try:
+        await _check_db_connection()
     total_customers = await db.customers.count_documents({})
     total_arr = await db.customers.aggregate([
         {"$group": {"_id": None, "total": {"$sum": "$arr"}}}
